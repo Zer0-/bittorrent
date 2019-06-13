@@ -1,9 +1,9 @@
 name:                  bittorrent
-version:               0.0.0.3
+version:               0.0.0.4
 license:               BSD3
 license-file:          LICENSE
 author:                Sam Truzjan
-maintainer:            Sam Truzjan <pxqr.sta@gmail.com>
+maintainer:            Zer0-
 copyright:             (c) 2013, Sam Truzjan
 category:              Network
 build-type:            Simple
@@ -36,11 +36,11 @@ source-repository this
 
 flag testing
   description:         Whether to build tests.
-  default:             False
+  default:             True
 
 flag examples
   description:         Whether to build examples.
-  default:             False
+  default:             True
 
 library
   default-language:    Haskell2010
@@ -54,13 +54,6 @@ library
                        Network.BitTorrent.Client
                        Network.BitTorrent.Client.Types
                        Network.BitTorrent.Client.Handle
-                       Network.BitTorrent.DHT
-                       Network.BitTorrent.DHT.ContactInfo
-                       Network.BitTorrent.DHT.Message
-                       Network.BitTorrent.DHT.Query
-                       Network.BitTorrent.DHT.Routing
-                       Network.BitTorrent.DHT.Session
-                       Network.BitTorrent.DHT.Token
                        Network.BitTorrent.Exchange
                        Network.BitTorrent.Exchange.Bitfield
                        Network.BitTorrent.Exchange.Block
@@ -95,10 +88,9 @@ library
 
   build-depends:       base       == 4.*
                      , lifted-base
-                     , bits-extras  >= 0.1.2
                      , convertible  >= 1.0
                      , pretty       >= 1.1
-                     , pretty-class >= 0.1
+                     , exceptions
 
                        -- Control
                      , deepseq      >= 1.3
@@ -153,8 +145,8 @@ library
                      , time         >= 1.0
 
                        -- Network
-                     , network      >= 2.4
-                     , krpc         >= 0.6.1
+                     , network
+                     , network-uri
                      , http-types   >= 0.8
                      , http-client  >= 0.2
                      , http-conduit >= 2.0
@@ -186,13 +178,6 @@ test-suite spec
                        Data.TorrentSpec
                        Network.BitTorrent.Client.HandleSpec
                        Network.BitTorrent.CoreSpec
-                       Network.BitTorrent.DHTSpec
-                       Network.BitTorrent.DHT.TestData
-                       Network.BitTorrent.DHT.MessageSpec
-                       Network.BitTorrent.DHT.QuerySpec
-                       Network.BitTorrent.DHT.RoutingSpec
-                       Network.BitTorrent.DHT.SessionSpec
-                       Network.BitTorrent.DHT.TokenSpec
                        Network.BitTorrent.Internal.CacheSpec
                        Network.BitTorrent.Internal.ProgressSpec
                        Network.BitTorrent.Tracker.TestData
@@ -237,6 +222,7 @@ test-suite spec
                      , http-types
                      , iproute
                      , network
+                     , network-uri
 
                        -- * System
                      , optparse-applicative >= 0.8
@@ -251,7 +237,6 @@ test-suite spec
 
                        -- * Bittorrent
                      , bencoding
-                     , krpc  >= 0.6.1
                      , bittorrent
                      , temporary
   ghc-options:         -Wall -fno-warn-orphans
@@ -285,7 +270,6 @@ executable mktorrent
   build-depends:       base == 4.*
                      , bytestring
                      , text
-                     , pretty-class
 
                      , mtl
                      , conduit
@@ -294,6 +278,7 @@ executable mktorrent
                      , parallel-io
 
                      , network
+                     , network-uri
                      , bittorrent
 
                      , filepath
@@ -311,6 +296,5 @@ executable client
   build-depends:       base        == 4.*
                      , bittorrent
                      , mtl
-                     , pretty-class
                      , data-default
                      , optparse-applicative

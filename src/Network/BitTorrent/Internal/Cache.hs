@@ -32,7 +32,6 @@ module Network.BitTorrent.Internal.Cache
        ) where
 
 import Control.Applicative
-import Data.Monoid
 import Data.Default
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -79,12 +78,17 @@ instance Alternative Cached where
 
 instance Monad Cached where
   return = pure
-  Cached {..} >>= f = Cached
+  Cached {..} >>= _ = Cached
     { lastUpdated       = undefined
     , updateInterval    = undefined
     , minUpdateInterval = undefined
     , cachedData        = undefined
     }
+
+instance Semigroup (Cached a) where
+    a <> b
+        | expirationTime a > expirationTime b = a
+        |             otherwise               = b
 
 instance Monoid (Cached a) where
   mempty = Cached
@@ -94,9 +98,6 @@ instance Monoid (Cached a) where
     , cachedData        = error "cached mempty: impossible happen"
     }
 
-  mappend a b
-    | expirationTime a > expirationTime b = a
-    |             otherwise               = b
 
 normalize :: NominalDiffTime -> NominalDiffTime
           -> (NominalDiffTime, NominalDiffTime)

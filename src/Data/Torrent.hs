@@ -19,7 +19,6 @@
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE OverlappingInstances       #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -27,6 +26,7 @@
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveFoldable             #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# OPTIONS -fno-warn-orphans           #-}
@@ -145,6 +145,7 @@ module Data.Torrent
        ) where
 
 import Prelude
+import GHC.Generics (Generic)
 import Control.Applicative
 import Control.DeepSeq
 import Control.Exception
@@ -154,7 +155,6 @@ import Crypto.Hash.SHA1 as SHA1
 import Data.BEncode as BE
 import Data.BEncode.Types as BE
 import Data.Bits
-import Data.Bits.Extras
 import Data.ByteString as BS
 import Data.ByteString.Base16 as Base16
 import Data.ByteString.Base32 as Base32
@@ -164,7 +164,6 @@ import Data.ByteString.Lazy  as BL
 import Data.Char
 import Data.Convertible
 import Data.Default
-import Data.Foldable as F
 import Data.Hashable   as Hashable
 import Data.Int
 import Data.List as L
@@ -177,13 +176,14 @@ import Data.Text.Encoding as T
 import Data.Text.Read
 import Data.Time.Clock.POSIX
 import Data.Typeable
-import Network (HostName)
+import Network.Socket (HostName)
 import Network.HTTP.Types.QueryLike
 import Network.HTTP.Types.URI
 import Network.URI
 import Text.ParserCombinators.ReadP as P
-import Text.PrettyPrint as PP
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass (Pretty(..), (<+>), Doc)
+import qualified Text.PrettyPrint.HughesPJ as PP
+import Text.PrettyPrint.HughesPJ (($$))
 import System.FilePath
 import System.Posix.Types
 
@@ -247,7 +247,7 @@ instance Show InfoHash where
 
 -- | Convert to base16 encoded Doc string.
 instance Pretty InfoHash where
-  pretty = text . show
+  pPrint = PP.text . show
 
 -- | Read base16 encoded string.
 instance Read InfoHash where
@@ -397,12 +397,12 @@ instance BEncode (FileInfo BS.ByteString) where
   {-# INLINE fromBEncode #-}
 
 instance Pretty (FileInfo BS.ByteString) where
-  pretty FileInfo {..} =
-       "Path: " <> text (T.unpack (T.decodeUtf8 fiName))
-    $$ "Size: " <> text (show fiLength)
+  pPrint FileInfo {..} =
+       "Path: " <> PP.text (T.unpack (T.decodeUtf8 fiName))
+    $$ "Size: " <> PP.text (show fiLength)
     $$ maybe PP.empty ppMD5 fiMD5Sum
    where
-    ppMD5 md5 = "MD5 : " <> text (show (Base16.encode md5))
+    ppMD5 md5 = "MD5 : " <> PP.text (show (Base16.encode md5))
 
 -- | Join file path.
 joinFilePath :: FileInfo [BS.ByteString] -> FileInfo BS.ByteString
@@ -465,8 +465,8 @@ instance BEncode LayoutInfo where
   fromBEncode = fromDict getLayoutInfo
 
 instance Pretty LayoutInfo where
-  pretty SingleFile {..} = pretty liFile
-  pretty MultiFile  {..} = vcat $ L.map (pretty . joinFilePath) liFiles
+  pPrint SingleFile {..} = pPrint liFile
+  pPrint MultiFile  {..} = PP.vcat $ L.map (pPrint . joinFilePath) liFiles
 
 -- | Test if this is single file torrent.
 isSingleFile :: LayoutInfo -> Bool
@@ -584,7 +584,7 @@ maxPieceSize = 4 * 1024 * 1024
 {-# INLINE maxPieceSize #-}
 
 toPow2 :: Int -> Int
-toPow2 x = bit $ fromIntegral (leadingZeros (0 :: Int) - leadingZeros x)
+toPow2 x = bit $ fromIntegral (countLeadingZeros (0 :: Int) - countLeadingZeros x)
 
 -- | Find the optimal piece size for a given torrent size.
 defaultPieceSize :: Int64 -> Int
@@ -610,13 +610,13 @@ data Piece a = Piece
 
     -- | Payload.
   , pieceData  :: !a
-  } deriving (Show, Read, Eq, Functor, Typeable)
+  } deriving (Show, Read, Eq, Functor, Typeable, Generic)
 
-instance NFData (Piece a)
+instance NFData a => NFData (Piece a)
 
 -- | Payload bytes are omitted.
 instance Pretty (Piece a) where
-  pretty Piece {..} = "Piece" <+> braces ("index" <+> "=" <+> int pieceIndex)
+  pPrint Piece {..} = "Piece" <+> PP.braces ("index" <+> "=" <+> PP.int pieceIndex)
 
 -- | Get size of piece in bytes.
 pieceSize :: Piece BL.ByteString -> PieceSize
@@ -632,11 +632,13 @@ hashPiece Piece {..} = SHA1.hashlazy pieceData
 
 -- | A flat array of SHA1 hash for each piece.
 newtype HashList = HashList { unHashList :: BS.ByteString }
-  deriving (Show, Read, Eq, BEncode, Typeable)
+  deriving (Show, Read, Eq, BEncode, Typeable, Generic)
 
 -- | Empty hash list.
 instance Default HashList where
   def = HashList ""
+
+instance NFData HashList
 
 -- | Part of torrent file used for torrent content validation.
 data PieceInfo = PieceInfo
@@ -645,7 +647,7 @@ data PieceInfo = PieceInfo
 
   , piPieceHashes  :: !HashList
     -- ^ Concatenation of all 20-byte SHA1 hash values.
-  } deriving (Show, Read, Eq, Typeable)
+  } deriving (Show, Read, Eq, Typeable, Generic)
 
 -- | Number of bytes in each piece.
 makeLensesFor [("piPieceLength", "pieceLength")] ''PieceInfo
@@ -685,7 +687,7 @@ instance BEncode PieceInfo where
 
 -- | Hashes are omitted.
 instance Pretty PieceInfo where
-  pretty  PieceInfo {..} = "Piece size: " <> int piPieceLength
+  pPrint  PieceInfo {..} = "Piece size: " <> PP.int piPieceLength
 
 slice :: Int -> Int -> BS.ByteString -> BS.ByteString
 slice start len = BS.take len . BS.drop start
@@ -797,9 +799,9 @@ ppPrivacy privacy = "Privacy: " <> if privacy then "private" else "public"
 --ppAdditionalInfo layout = PP.empty
 
 instance Pretty InfoDict where
-  pretty InfoDict {..} =
-    pretty idLayoutInfo $$
-    pretty  idPieceInfo  $$
+  pPrint InfoDict {..} =
+    pPrint idLayoutInfo $$
+    pPrint  idPieceInfo  $$
     ppPrivacy    idPrivate
 
 {-----------------------------------------------------------------------
@@ -890,7 +892,7 @@ instance BEncode POSIXTime where
   fromBEncode _            = decodingError $ "POSIXTime"
 
 -- TODO to bencoding package
-instance BEncode String where
+instance {-# OVERLAPPING #-} BEncode String where
   toBEncode = toBEncode . T.pack
   fromBEncode v = T.unpack <$> fromBEncode v
 
@@ -923,34 +925,34 @@ instance BEncode Torrent where
             <*>? "signature"
 
 (<:>) :: Doc -> Doc -> Doc
-name <:>   v       = name <> ":" <+> v
+name <:> v = (name <> ":") <+> v
 
 (<:>?) :: Doc -> Maybe Doc -> Doc
 _    <:>?  Nothing = PP.empty
 name <:>? (Just d) = name <:> d
 
 instance Pretty Torrent where
-  pretty Torrent {..} =
-       "InfoHash: " <> pretty (idInfoHash tInfoDict)
-    $$ hang "General" 4 generalInfo
-    $$ hang "Tracker" 4 trackers
-    $$ pretty tInfoDict
+  pPrint Torrent {..} =
+       "InfoHash: " <> pPrint (idInfoHash tInfoDict)
+    $$ PP.hang "General" 4 generalInfo
+    $$ PP.hang "Tracker" 4 trackers
+    $$ pPrint tInfoDict
    where
     trackers = case tAnnounceList of
-        Nothing  -> text (show tAnnounce)
-        Just xxs -> vcat $ L.map ppTier $ L.zip [1..] xxs
+        Nothing  -> PP.text (show tAnnounce)
+        Just xxs -> PP.vcat $ L.map ppTier $ L.zip [1..] xxs
       where
-        ppTier (n, xs) = "Tier #" <> int n <:> vcat (L.map (text . show) xs)
+        ppTier (n, xs) = "Tier #" <> PP.int n <:> PP.vcat (L.map (PP.text . show) xs)
 
     generalInfo =
-        "Comment"       <:>? ((text . T.unpack) <$> tComment)      $$
-        "Created by"    <:>? ((text . T.unpack) <$> tCreatedBy)    $$
-        "Created on"    <:>? ((text . show . posixSecondsToUTCTime)
+        "Comment"       <:>? ((PP.text . T.unpack) <$> tComment)      $$
+        "Created by"    <:>? ((PP.text . T.unpack) <$> tCreatedBy)    $$
+        "Created on"    <:>? ((PP.text . show . posixSecondsToUTCTime)
                                <$> tCreationDate) $$
-        "Encoding"      <:>? ((text . T.unpack) <$> tEncoding)     $$
-        "Publisher"     <:>? ((text . show) <$> tPublisher)    $$
-        "Publisher URL" <:>? ((text . show) <$> tPublisherURL) $$
-        "Signature"     <:>? ((text . show) <$> tSignature)
+        "Encoding"      <:>? ((PP.text . T.unpack) <$> tEncoding)     $$
+        "Publisher"     <:>? ((PP.text . show) <$> tPublisher)    $$
+        "Publisher URL" <:>? ((PP.text . show) <$> tPublisherURL) $$
+        "Signature"     <:>? ((PP.text . show) <$> tSignature)
 
 -- | No files, no trackers, no nodes, etc...
 instance Default Torrent where
@@ -1037,7 +1039,7 @@ renderURN URN {..}
   = T.intercalate ":" $ "urn" : urnNamespace ++ [urnString]
 
 instance Pretty URN where
-  pretty = text . T.unpack . renderURN
+  pPrint = PP.text . T.unpack . renderURN
 
 instance Show URN where
   showsPrec n = showsPrec n . T.unpack . renderURN
@@ -1069,7 +1071,7 @@ instance IsString URN where
   fromString = either (error . prettyConvertError) id
              . safeConvert . T.pack
 
--- | Try to parse an URN from its text representation.
+-- | Try to parse an URN from its PP.text representation.
 --
 --  Use 'safeConvert' for detailed error messages.
 --
@@ -1260,7 +1262,7 @@ renderMagnetStr :: Magnet -> String
 renderMagnetStr = show . (convert :: Magnet -> URI)
 
 instance Pretty Magnet where
-  pretty = PP.text . renderMagnetStr
+  pPrint = PP.text . renderMagnetStr
 
 instance Show Magnet where
   show = renderMagnetStr

@@ -56,18 +56,16 @@ module Network.BitTorrent.Exchange.Block
        ) where
 
 import Prelude hiding (span)
-import Control.Applicative
 import Data.ByteString as BS hiding (span)
 import Data.ByteString.Lazy as BL hiding (span)
 import Data.ByteString.Lazy.Builder as BS
 import Data.Default
-import Data.Monoid
 import Data.List as L hiding (span)
 import Data.Serialize as S
 import Data.Typeable
 import Numeric
-import Text.PrettyPrint as PP hiding ((<>))
-import Text.PrettyPrint.Class
+import qualified Text.PrettyPrint.HughesPJ as PP
+import Text.PrettyPrint.HughesPJClass (Pretty(..), (<+>))
 
 import Data.Torrent
 
@@ -138,10 +136,10 @@ instance Serialize BlockIx where
   {-# INLINE put #-}
 
 instance Pretty BlockIx where
-  pretty BlockIx {..} =
-    ("piece  = " <> int ixPiece  <> ",") <+>
-    ("offset = " <> int ixOffset <> ",") <+>
-    ("length = " <> int ixLength)
+  pPrint BlockIx {..} =
+    ("piece  = " <> PP.int ixPiece  <> ",") <+>
+    ("offset = " <> PP.int ixOffset <> ",") <+>
+    ("length = " <> PP.int ixLength)
 
 -- | Get location of payload bytes in the torrent content.
 blockIxRange :: (Num a, Integral a) => PieceSize -> BlockIx -> (a, a)
@@ -169,8 +167,8 @@ data Block payload = Block {
 
 -- | Payload is ommitted.
 instance Pretty (Block BL.ByteString) where
-  pretty = pretty . blockIx
-  {-# INLINE pretty #-}
+  pPrint = pPrint . blockIx
+  {-# INLINE pPrint #-}
 
 -- | Get size of block /payload/ in bytes.
 blockSize :: Block BL.ByteString -> BlockSize
@@ -195,10 +193,10 @@ isPiece pieceLen blk @ (Block i offset _) =
 
 -- | First block in the piece.
 leadingBlock :: PieceIx -> BlockSize -> BlockIx
-leadingBlock pix blockSize = BlockIx
+leadingBlock pix blksize = BlockIx
   { ixPiece  = pix
   , ixOffset = 0
-  , ixLength = blockSize
+  , ixLength = blksize
   }
 {-# INLINE leadingBlock #-}
 
@@ -216,7 +214,7 @@ data Bucket
   | Fill {-# UNPACK #-} !ChunkSize !Builder !Bucket
 
 instance Show Bucket where
-  showsPrec i  Nil          = showString ""
+  showsPrec _  Nil          = showString ""
   showsPrec i (Span s   xs) = showString "Span " <> showInt s
                            <> showString " "     <> showsPrec i xs
   showsPrec i (Fill s _ xs) = showString "Fill " <> showInt s
@@ -235,18 +233,18 @@ valid = check Nothing
       prevIsSpan /= Just True &&    -- Span n (NotSpan .. ) invariant
       sz > 0 &&                     -- Span is always non-empty
       check (Just True) xs
-    check prevIsSpan (Fill sz b xs) =
+    check prevIsSpan (Fill sz _ xs) =
       prevIsSpan /= Just True &&    -- Fill n (NotFill .. ) invariant
       sz > 0 &&                     -- Fill is always non-empty
       check (Just False) xs
 
 instance Pretty Bucket where
-  pretty Nil = nilInvFailed
-  pretty bkt = go bkt
+  pPrint Nil = nilInvFailed
+  pPrint bkt = go bkt
     where
       go  Nil           = PP.empty
       go (Span sz   xs) = "Span" <+> PP.int sz <+> go xs
-      go (Fill sz b xs) = "Fill" <+> PP.int sz <+> go xs
+      go (Fill sz _ xs) = "Fill" <+> PP.int sz <+> go xs
 
 -- | Smart constructor: use it when some block is /deleted/ from
 -- bucket.
@@ -328,8 +326,8 @@ insertSpan !pos !bs !span_sz !xs =
      mkSpan suff_len $
      xs
   where
-    mkSpan 0  xs = xs
-    mkSpan sz xs = Span sz xs
+    mkSpan 0  bucket = bucket
+    mkSpan sz bucket = Span sz bucket
 
 -- | /O(n)/. Insert a strict bytestring at specified position.
 --

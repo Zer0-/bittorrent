@@ -104,7 +104,6 @@ import Data.Default
 import Data.List as L
 import Data.Map.Strict as M
 import Data.Maybe
-import Data.Monoid
 import Data.Ord
 import Data.Serialize as S
 import Data.String
@@ -112,10 +111,10 @@ import Data.Text as T
 import Data.Typeable
 import Data.Word
 import Data.IP
-import Network
 import Network.Socket hiding (KeepAlive)
-import Text.PrettyPrint as PP hiding ((<>))
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass (Pretty(..), (<+>), Doc)
+import qualified Text.PrettyPrint.HughesPJ as PP
+import Text.PrettyPrint.HughesPJ (($$), ($+$))
 
 import Data.Torrent hiding (Piece (..))
 import qualified Data.Torrent as P (Piece (..))
@@ -141,7 +140,7 @@ class Capabilities caps where
   allowed  :: Ext caps -> caps -> Bool
 
 ppCaps :: Capabilities caps => Pretty (Ext caps) => caps -> Doc
-ppCaps = hcat . punctuate ", " . L.map pretty . fromCaps
+ppCaps = PP.hcat . PP.punctuate ", " . L.map pPrint . fromCaps
 
 {-----------------------------------------------------------------------
 --  Extensions
@@ -159,9 +158,9 @@ data Extension
 
 -- | Full extension names, suitable for logging.
 instance Pretty Extension where
-  pretty ExtDHT      = "Distributed Hash Table Protocol"
-  pretty ExtFast     = "Fast Extension"
-  pretty ExtExtended = "Extension Protocol"
+  pPrint ExtDHT      = "Distributed Hash Table Protocol"
+  pPrint ExtFast     = "Fast Extension"
+  pPrint ExtExtended = "Extension Protocol"
 
 -- | Extension bitmask as specified by BEP 4.
 extMask :: Extension -> Word64
@@ -180,21 +179,22 @@ newtype Caps = Caps Word64
 
 -- | Render set of extensions as comma separated list.
 instance Pretty Caps where
-  pretty = ppCaps
-  {-# INLINE pretty #-}
+  pPrint = ppCaps
+  {-# INLINE pPrint #-}
 
 -- | The empty set.
 instance Default Caps where
   def = Caps 0
   {-# INLINE def #-}
 
+instance Semigroup Caps where
+  (Caps a) <> (Caps b) = Caps (a .&. b)
+  {-# INLINE (<>) #-}
+
 -- | Monoid under intersection. 'mempty' includes all known extensions.
 instance Monoid Caps where
   mempty = toCaps [minBound .. maxBound]
   {-# INLINE mempty #-}
-
-  mappend (Caps a) (Caps b) = Caps (a .&. b)
-  {-# INLINE mappend #-}
 
 -- | 'Handshake' compatible encoding.
 instance Serialize Caps where
@@ -235,7 +235,7 @@ instance Show ProtocolName where
   show (ProtocolName bs) = show bs
 
 instance Pretty ProtocolName where
-  pretty (ProtocolName bs) = PP.text $ BC.unpack bs
+  pPrint (ProtocolName bs) = PP.text $ BC.unpack bs
 
 instance IsString ProtocolName where
   fromString str
@@ -287,10 +287,10 @@ instance Serialize Handshake where
 
 -- | Show handshake protocol string, caps and fingerprint.
 instance Pretty Handshake where
-  pretty Handshake {..}
-    = pretty hsProtocol           $$
-      pretty hsReserved           $$
-      pretty (fingerprint hsPeerId)
+  pPrint Handshake {..}
+    = pPrint hsProtocol           $$
+      pPrint hsReserved           $$
+      pPrint (fingerprint hsPeerId)
 
 -- | Get handshake message size in bytes from the length of protocol
 -- string.
@@ -334,12 +334,12 @@ data ByteStats = ByteStats
   } deriving Show
 
 instance Pretty ByteStats where
-  pretty s @ ByteStats {..} = fsep
+  pPrint s @ ByteStats {..} = PP.fsep
     [ PP.int overhead, "overhead"
     , PP.int control,  "control"
     , PP.int payload,  "payload"
     , "bytes"
-    ] $+$ fsep
+    ] $+$ PP.fsep
     [ PP.int (byteLength s), "total bytes"
     ]
 
@@ -347,14 +347,16 @@ instance Pretty ByteStats where
 instance Default ByteStats where
   def = ByteStats 0 0 0
 
+instance Semigroup ByteStats where
+    a <> b = ByteStats
+        { overhead = overhead a + overhead b
+        , control  = control  a + control  b
+        , payload  = payload  a + payload  b
+        }
+
 -- | Monoid under addition.
 instance Monoid ByteStats where
   mempty      = def
-  mappend a b = ByteStats
-    { overhead = overhead a + overhead b
-    , control  = control  a + control  b
-    , payload  = payload  a + payload  b
-    }
 
 -- | Sum of the all byte sequences.
 byteLength :: ByteStats -> Int
@@ -408,10 +410,10 @@ data StatusUpdate
     deriving (Show, Eq, Ord, Typeable)
 
 instance Pretty StatusUpdate where
-  pretty (Choking    False) = "not choking"
-  pretty (Choking    True ) = "choking"
-  pretty (Interested False) = "not interested"
-  pretty (Interested True ) = "interested"
+  pPrint (Choking    False) = "not choking"
+  pPrint (Choking    True ) = "choking"
+  pPrint (Interested False) = "not interested"
+  pPrint (Interested True ) = "interested"
 
 instance PeerMessage StatusUpdate where
   envelop _ = Status
@@ -439,8 +441,8 @@ data Available =
     deriving (Show, Eq)
 
 instance Pretty Available where
-  pretty (Have     ix ) = "Have"     <+> int ix
-  pretty (Bitfield _  ) = "Bitfield"
+  pPrint (Have     ix ) = "Have"     <+> PP.int ix
+  pPrint (Bitfield _  ) = "Bitfield"
 
 instance PeerMessage Available where
   envelop _ = Available
@@ -472,9 +474,9 @@ data Transfer
     deriving (Show, Eq)
 
 instance Pretty Transfer where
-  pretty (Request  ix ) = "Request"  <+> pretty ix
-  pretty (Piece    blk) = "Piece"    <+> pretty blk
-  pretty (Cancel   i  ) = "Cancel"   <+> pretty i
+  pPrint (Request  ix ) = "Request"  <+> pPrint ix
+  pPrint (Piece    blk) = "Piece"    <+> pPrint blk
+  pPrint (Cancel   i  ) = "Cancel"   <+> pPrint i
 
 instance PeerMessage Transfer where
   envelop _ = Transfer
@@ -519,11 +521,11 @@ data FastMessage =
     deriving (Show, Eq)
 
 instance Pretty FastMessage where
-  pretty (HaveAll          ) = "Have all"
-  pretty (HaveNone         ) = "Have none"
-  pretty (SuggestPiece  pix) = "Suggest"      <+> int    pix
-  pretty (RejectRequest bix) = "Reject"       <+> pretty bix
-  pretty (AllowedFast   pix) = "Allowed fast" <+> int    pix
+  pPrint (HaveAll          ) = "Have all"
+  pPrint (HaveNone         ) = "Have none"
+  pPrint (SuggestPiece  pix) = "Suggest"      <+> PP.int    pix
+  pPrint (RejectRequest bix) = "Reject"       <+> pPrint bix
+  pPrint (AllowedFast   pix) = "Allowed fast" <+> PP.int    pix
 
 instance PeerMessage FastMessage where
   envelop  _ = Fast
@@ -556,7 +558,7 @@ instance IsString ExtendedExtension where
       msg = "fromString: could not parse ExtendedExtension"
 
 instance Pretty ExtendedExtension where
-  pretty ExtMetadata = "Extension for Peers to Send Metadata Files"
+  pPrint ExtMetadata = "Extension for Peers to Send Metadata Files"
 
 fromKey :: BKey -> Maybe ExtendedExtension
 fromKey "ut_metadata" = Just ExtMetadata
@@ -582,8 +584,8 @@ newtype ExtendedCaps = ExtendedCaps { extendedCaps :: ExtendedMap }
   deriving (Show, Eq)
 
 instance Pretty ExtendedCaps where
-  pretty = ppCaps
-  {-# INLINE pretty #-}
+  pPrint = ppCaps
+  {-# INLINE pPrint #-}
 
 -- | The empty set.
 instance Default ExtendedCaps where
@@ -596,10 +598,12 @@ instance Default ExtendedCaps where
 --     * the 'mappend' operation is NOT commutative: it return message
 -- id from the first caps for the extensions existing in both caps.
 --
+instance Semigroup ExtendedCaps where
+    (ExtendedCaps a) <> (ExtendedCaps b) =
+        ExtendedCaps (M.intersection a b)
+
 instance Monoid ExtendedCaps where
-  mempty  = toCaps [minBound..maxBound]
-  mappend (ExtendedCaps a) (ExtendedCaps b) =
-    ExtendedCaps (M.intersection a b)
+    mempty  = toCaps [minBound..maxBound]
 
 appendBDict ::  BDict -> ExtendedMap -> ExtendedMap
 appendBDict (Cons key val xs) caps
@@ -685,22 +689,23 @@ defaultQueueLength = 1
 instance Default ExtendedHandshake where
   def = ExtendedHandshake def def def def def def def def
 
+instance Semigroup ExtendedHandshake where
+    old <> new = ExtendedHandshake {
+        ehsCaps         = ehsCaps old <> ehsCaps new,
+        ehsIPv4         = ehsIPv4 old         `mergeOld` ehsIPv4 new,
+        ehsIPv6         = ehsIPv6 old         `mergeOld` ehsIPv6 new,
+        ehsMetadataSize = ehsMetadataSize old `mergeNew` ehsMetadataSize new,
+        ehsPort         = ehsPort old         `mergeOld` ehsPort new,
+        ehsQueueLength  = ehsQueueLength old  `mergeNew` ehsQueueLength new,
+        ehsVersion      = ehsVersion old      `mergeOld` ehsVersion new,
+        ehsYourIp       = ehsYourIp old       `mergeOld` ehsYourIp new
+    }
+        where
+            mergeOld mold mnew = mold <|> mnew
+            mergeNew mold mnew = mnew <|> mold
+
 instance Monoid ExtendedHandshake where
     mempty = def { ehsCaps = mempty }
-    mappend old new = ExtendedHandshake {
-      ehsCaps         = ehsCaps old <> ehsCaps new,
-      ehsIPv4         = ehsIPv4 old         `mergeOld` ehsIPv4 new,
-      ehsIPv6         = ehsIPv6 old         `mergeOld` ehsIPv6 new,
-      ehsMetadataSize = ehsMetadataSize old `mergeNew` ehsMetadataSize new,
-      ehsPort         = ehsPort old         `mergeOld` ehsPort new,
-      ehsQueueLength  = ehsQueueLength old  `mergeNew` ehsQueueLength new,
-      ehsVersion      = ehsVersion old      `mergeOld` ehsVersion new,
-      ehsYourIp       = ehsYourIp old       `mergeOld` ehsYourIp new
-    }
-      where
-        mergeOld mold mnew = mold <|> mnew
-        mergeNew mold mnew = mnew <|> mold
-
 
 instance BEncode ExtendedHandshake where
   toBEncode ExtendedHandshake {..} = toDict $
@@ -738,7 +743,7 @@ getYourIp f =
              _ -> fail ""
 
 instance Pretty ExtendedHandshake where
-  pretty = PP.text . show
+  pPrint = PP.text . show
 
 -- | NOTE: Approximated 'stats'.
 instance PeerMessage ExtendedHandshake where
@@ -760,7 +765,7 @@ nullExtendedHandshake caps = ExtendedHandshake
     , ehsMetadataSize = Nothing
     , ehsPort         = Nothing
     , ehsQueueLength  = Just defaultQueueLength
-    , ehsVersion      = Just $ T.pack $ render $ pretty libFingerprint
+    , ehsVersion      = Just $ T.pack $ PP.render $ pPrint libFingerprint
     , ehsYourIp       = Nothing
     }
 
@@ -843,10 +848,10 @@ instance BEncode ExtendedMetadata where
 
 -- | Piece data bytes are omitted.
 instance Pretty ExtendedMetadata where
-  pretty (MetadataRequest pix  ) = "Request" <+> PP.int    pix
-  pretty (MetadataData    p   t) = "Data"    <+>    pretty p   <+> PP.int t
-  pretty (MetadataReject  pix  ) = "Reject"  <+> PP.int    pix
-  pretty (MetadataUnknown bval ) = "Unknown" <+> ppBEncode bval
+  pPrint (MetadataRequest pix  ) = "Request" <+> PP.int    pix
+  pPrint (MetadataData    p   t) = "Data"    <+> pPrint p  <+>  PP.int t
+  pPrint (MetadataReject  pix  ) = "Reject"  <+> PP.int    pix
+  pPrint (MetadataUnknown bval ) = "Unknown" <+> ppBEncode bval
 
 -- | NOTE: Approximated 'stats'.
 instance PeerMessage ExtendedMetadata where
@@ -957,9 +962,9 @@ data ExtendedMessage
     deriving (Show, Eq, Typeable)
 
 instance Pretty ExtendedMessage where
-  pretty (EHandshake     ehs) = pretty ehs
-  pretty (EMetadata  _   msg) = "Metadata" <+> pretty msg
-  pretty (EUnknown   mid _  ) = "Unknown"  <+> PP.text (show mid)
+  pPrint (EHandshake     ehs) = pPrint ehs
+  pPrint (EMetadata  _   msg) = "Metadata" <+> pPrint msg
+  pPrint (EUnknown   mid _  ) = "Unknown"  <+> PP.text (show mid)
 
 instance PeerMessage ExtendedMessage where
   envelop  _ = Extended
@@ -1010,13 +1015,13 @@ instance Default Message where
 
 -- | Payload bytes are omitted.
 instance Pretty Message where
-  pretty (KeepAlive  ) = "Keep alive"
-  pretty (Status    m) = "Status" <+> pretty m
-  pretty (Available m) = pretty m
-  pretty (Transfer  m) = pretty m
-  pretty (Port      p) = "Port" <+> int (fromEnum p)
-  pretty (Fast      m) = pretty m
-  pretty (Extended  m) = pretty m
+  pPrint (KeepAlive  ) = "Keep alive"
+  pPrint (Status    m) = "Status" <+> pPrint m
+  pPrint (Available m) = pPrint m
+  pPrint (Transfer  m) = pPrint m
+  pPrint (Port      p) = "Port" <+> PP.int (fromEnum p)
+  pPrint (Fast      m) = pPrint m
+  pPrint (Extended  m) = pPrint m
 
 instance PeerMessage Message where
   envelop _ = id

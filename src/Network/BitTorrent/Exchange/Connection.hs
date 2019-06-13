@@ -107,15 +107,13 @@ module Network.BitTorrent.Exchange.Connection
        , Options         (..)
        ) where
 
-import Control.Applicative
 import Control.Concurrent hiding (yield)
 import Control.Exception
+import Control.Monad.Catch (MonadThrow (..))
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Trans.Resource
 import Control.Lens
 import Data.ByteString as BS
-import Data.ByteString.Lazy as BSL
 import Data.Conduit as C
 import Data.Conduit.Cereal
 import Data.Conduit.List
@@ -124,14 +122,13 @@ import Data.Default
 import Data.IORef
 import Data.List as L
 import Data.Maybe as M
-import Data.Monoid
 import Data.Serialize as S
 import Data.Typeable
-import Network
 import Network.Socket hiding (Connected)
 import Network.Socket.ByteString as BS
-import Text.PrettyPrint as PP hiding ((<>))
-import Text.PrettyPrint.Class
+import qualified Text.PrettyPrint.HughesPJ as PP
+import Text.PrettyPrint.HughesPJClass (Pretty(..), (<+>))
+import Text.PrettyPrint.HughesPJ (($+$))
 import Text.Show.Functions ()
 import System.Log.FastLogger (ToLogStr(..))
 import System.Timeout
@@ -161,7 +158,7 @@ instance Default ChannelSide where
   def = ThisPeer
 
 instance Pretty ChannelSide where
-  pretty = PP.text . show
+  pPrint = PP.text . show
 
 -- | A protocol errors occur when a peer violates protocol
 -- specification.
@@ -213,7 +210,7 @@ data ProtocolError
     deriving Show
 
 instance Pretty ProtocolError where
-  pretty = PP.text . show
+  pPrint = PP.text . show
 
 errorPenalty :: ProtocolError -> Int
 errorPenalty (InvalidProtocol      _) = 1
@@ -256,7 +253,7 @@ data WireFailure
 instance Exception WireFailure
 
 instance Pretty WireFailure where
-  pretty = PP.text . show
+  pPrint = PP.text . show
 
 -- TODO
 -- data Penalty = Ban | Penalty Int
@@ -273,7 +270,7 @@ isWireFailure :: Monad m => WireFailure -> m ()
 isWireFailure _ = return ()
 
 protocolError :: MonadThrow m => ProtocolError -> m a
-protocolError = monadThrow . ProtocolError
+protocolError = throwM . ProtocolError
 
 {-----------------------------------------------------------------------
 --  Stats
@@ -288,29 +285,33 @@ data FlowStats = FlowStats
   } deriving Show
 
 instance Pretty FlowStats where
-  pretty FlowStats {..} =
+  pPrint FlowStats {..} =
     PP.int messageCount <+> "messages" $+$
-    pretty messageBytes
+    pPrint messageBytes
 
 -- | Zeroed stats.
 instance Default FlowStats where
   def = FlowStats 0 def
 
--- | Monoid under addition.
-instance Monoid FlowStats where
-  mempty = def
-  mappend a b = FlowStats
+instance Semigroup FlowStats where
+  a <> b = FlowStats
     { messageBytes = messageBytes a <> messageBytes b
     , messageCount = messageCount a +  messageCount b
     }
 
+-- | Monoid under addition.
+instance Monoid FlowStats where
+  mempty = def
+
 -- | Find average length of byte sequences per message.
+{-
 avgByteStats :: FlowStats -> ByteStats
 avgByteStats (FlowStats n ByteStats {..}) = ByteStats
   { overhead = overhead `quot` n
   , control  = control  `quot` n
   , payload  = payload  `quot` n
   }
+-}
 
 -- | Message stats in both directions. This data can be retrieved
 -- using 'getStats' function.
@@ -328,23 +329,25 @@ data ConnectionStats = ConnectionStats
   } deriving Show
 
 instance Pretty ConnectionStats where
-  pretty ConnectionStats {..} = vcat
-    [ "Recv:" <+> pretty incomingFlow
-    , "Sent:" <+> pretty outcomingFlow
-    , "Both:" <+> pretty (incomingFlow <> outcomingFlow)
+  pPrint ConnectionStats {..} = PP.vcat
+    [ "Recv:" <+> pPrint incomingFlow
+    , "Sent:" <+> pPrint outcomingFlow
+    , "Both:" <+> pPrint (incomingFlow <> outcomingFlow)
     ]
 
 -- | Zeroed stats.
 instance Default ConnectionStats where
   def = ConnectionStats def def
 
--- | Monoid under addition.
-instance Monoid ConnectionStats where
-  mempty = def
-  mappend a b = ConnectionStats
+instance Semigroup ConnectionStats where
+  a <> b = ConnectionStats
     { incomingFlow  = incomingFlow  a <> incomingFlow  b
     , outcomingFlow = outcomingFlow a <> outcomingFlow b
     }
+
+-- | Monoid under addition.
+instance Monoid ConnectionStats where
+  mempty = def
 
 -- | Aggregate one more message stats in the /specified/ direction.
 addStats :: ChannelSide -> ByteStats -> ConnectionStats -> ConnectionStats
@@ -419,8 +422,10 @@ instance Default FloodDetector where
     }
 
 -- | This peer might drop connection if the detector gives positive answer.
+{-
 runDetector :: FloodDetector -> ConnectionStats -> Bool
 runDetector FloodDetector {..} = floodPredicate floodFactor floodThreshold
+-}
 
 {-----------------------------------------------------------------------
 --  Options
@@ -493,19 +498,21 @@ data PeerStatus = PeerStatus
 $(makeLenses ''PeerStatus)
 
 instance Pretty PeerStatus where
-  pretty PeerStatus {..} =
-    pretty (Choking _choking) <+> "and" <+> pretty (Interested _interested)
+  pPrint PeerStatus {..} =
+    pPrint (Choking _choking) <+> "and" <+> pPrint (Interested _interested)
 
 -- | Connections start out choked and not interested.
 instance Default PeerStatus where
   def = PeerStatus True False
 
-instance Monoid PeerStatus where
-  mempty      = def
-  mappend a b = PeerStatus
+instance Semigroup PeerStatus where
+  a <> b = PeerStatus
     { _choking    = _choking    a && _choking    b
     , _interested = _interested a || _interested b
     }
+
+instance Monoid PeerStatus where
+  mempty      = def
 
 -- | Can be used to update remote peer status using incoming 'Status'
 -- message.
@@ -535,9 +542,9 @@ data ConnectionStatus = ConnectionStatus
 $(makeLenses ''ConnectionStatus)
 
 instance Pretty ConnectionStatus where
-  pretty ConnectionStatus {..} =
-    "this  " PP.<+> pretty _clientStatus PP.$$
-    "remote" PP.<+> pretty _remoteStatus
+  pPrint ConnectionStatus {..} =
+    "this  " PP.<+> pPrint _clientStatus PP.$$
+    "remote" PP.<+> pPrint _remoteStatus
 
 -- | Connections start out choked and not interested.
 instance Default ConnectionStatus where
@@ -646,7 +653,7 @@ data Connection s = Connection
   }
 
 instance Pretty (Connection s) where
-  pretty Connection {..} = "Connection"
+  pPrint Connection {..} = "Connection"
 
 instance ToLogStr (Connection s) where
   toLogStr Connection {..} = mconcat
@@ -660,10 +667,12 @@ instance ToLogStr (Connection s) where
     ]
 
 -- TODO check extended messages too
+{-
 isAllowed :: Connection s -> Message -> Bool
 isAllowed Connection {..} msg
   | Just ext <- requires msg = ext `allowed` connCaps
   |          otherwise       = True
+-}
 
 {-----------------------------------------------------------------------
 --  Hanshaking
@@ -755,7 +764,7 @@ validate side msg = do
 
 trackFlow :: ChannelSide -> Wire s ()
 trackFlow side = iterM $ do
-  validate side
+  _ <- validate side
   putStats side
 
 {-----------------------------------------------------------------------
@@ -766,28 +775,28 @@ trackFlow side = iterM $ do
 seconds :: Int
 seconds = 1000000
 
-sinkChan :: MonadIO m => Chan Message -> Sink Message m ()
+sinkChan :: MonadIO m => Chan Message -> ConduitT Message Void m ()
 sinkChan chan = await >>= maybe (return ()) (liftIO . writeChan chan)
 
-sourceChan :: MonadIO m => Int -> Chan Message -> Source m Message
-sourceChan interval chan = do
-  mmsg <- liftIO $ timeout (interval * seconds) $ readChan chan
+sourceChan :: MonadIO m => Int -> Chan Message -> ConduitT () Message m ()
+sourceChan int chan = do
+  mmsg <- liftIO $ timeout (int * seconds) $ readChan chan
   yield $ fromMaybe Msg.KeepAlive mmsg
 
 -- | Normally you should use 'connectWire' or 'acceptWire'.
 runWire :: Wire s () -> Socket -> Chan Message -> Connection s -> IO ()
 runWire action sock chan conn = flip runReaderT conn $ runConnected $
-  sourceSocket sock        $=
-    conduitGet S.get       $=
-      trackFlow RemotePeer $=
-         action            $=
+  sourceSocket sock        .|
+    conduitGet2 S.get      .|
+      trackFlow RemotePeer .|
+         action            .|
       trackFlow ThisPeer   C.$$
     sinkChan chan
 
 -- | This function will block until a peer send new message. You can
 -- also use 'await'.
 recvMessage :: Wire s Message
-recvMessage = await >>= maybe (monadThrow PeerDisconnected) return
+recvMessage = await >>= maybe (throwM PeerDisconnected) return
 
 -- | You can also use 'yield'.
 sendMessage :: PeerMessage msg => msg -> Wire s ()
@@ -809,7 +818,7 @@ filterQueue p = lift $ do
 
 -- | Forcefully terminate wire session and close socket.
 disconnectPeer :: Wire s a
-disconnectPeer = monadThrow DisconnectPeer
+disconnectPeer = throwM DisconnectPeer
 
 extendedHandshake :: ExtendedCaps -> Wire s ()
 extendedHandshake caps = do
@@ -822,17 +831,21 @@ extendedHandshake caps = do
       connRemoteEhs .= remoteEhs
     _ -> protocolError HandshakeRefused
 
+{-
 rehandshake :: ExtendedCaps -> Wire s ()
-rehandshake caps = error "rehandshake"
+rehandshake _ = error "rehandshake"
 
 reconnect :: Wire s ()
 reconnect = error "reconnect"
+-}
 
+{-
 data ConnectionId    = ConnectionId
   { topic      :: !InfoHash
   , remoteAddr :: !(PeerAddr IP)
   , thisAddr   :: !(PeerAddr (Maybe IP)) -- ^ foreign address of this node.
   }
+-}
 
 -- | /Preffered/ settings of wire. To get the real use 'ask'.
 data ConnectionPrefs = ConnectionPrefs

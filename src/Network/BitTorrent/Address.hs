@@ -91,12 +91,10 @@ import qualified Data.ByteString.Lazy.Builder as BS
 import Data.Char
 import Data.Convertible
 import Data.Default
-import Data.Foldable
-import Data.IP
+import Data.IP hiding (fromSockAddr)
 import Data.List as L
 import Data.List.Split as L
 import Data.Maybe       (fromMaybe, catMaybes)
-import Data.Monoid
 import Data.Hashable
 import Data.Ord
 import Data.Serialize as S
@@ -109,9 +107,8 @@ import qualified Text.ParserCombinators.ReadP as RP
 import Text.Read        (readMaybe)
 import Network.HTTP.Types.QueryLike
 import Network.Socket
-import Text.PrettyPrint as PP hiding ((<>))
-import Text.PrettyPrint.Class
-import System.Locale    (defaultTimeLocale)
+import Text.PrettyPrint.HughesPJClass (Pretty(..), (<+>))
+import qualified Text.PrettyPrint.HughesPJ as PP
 import System.Entropy
 
 -- import Paths_bittorrent (version)
@@ -121,7 +118,7 @@ import System.Entropy
 -----------------------------------------------------------------------}
 
 instance Pretty UTCTime where
-  pretty = PP.text . show
+  pPrint = PP.text . show
 
 class (Eq a, Serialize a, Typeable a, Hashable a, Pretty a)
     => Address a where
@@ -155,12 +152,14 @@ setPort :: PortNumber -> SockAddr -> SockAddr
 setPort port (SockAddrInet  _   h  ) = SockAddrInet  port   h
 setPort port (SockAddrInet6 _ f h s) = SockAddrInet6 port f h s
 setPort _    (SockAddrUnix  s      ) = SockAddrUnix  s
+setPort _    (SockAddrCan   i      ) = SockAddrCan  i
 {-# INLINE setPort #-}
 
 getPort :: SockAddr -> Maybe PortNumber
 getPort (SockAddrInet  p   _  ) = Just p
 getPort (SockAddrInet6 p _ _ _) = Just p
 getPort (SockAddrUnix  _      ) = Nothing
+getPort (SockAddrCan   _      ) = Nothing
 {-# INLINE getPort #-}
 
 instance Address a => Address (NodeAddr a) where
@@ -216,7 +215,7 @@ instance IsString PeerId where
       bs = fromString str
 
 instance Pretty PeerId where
-  pretty = text . BC.unpack . getPeerId
+  pPrint = PP.text . BC.unpack . getPeerId
 
 instance Convertible BS.ByteString PeerId where
   safeConvert bs
@@ -373,8 +372,8 @@ instance Hashable PortNumber where
   {-# INLINE hashWithSalt #-}
 
 instance Pretty PortNumber where
-  pretty = PP.int . fromEnum
-  {-# INLINE pretty #-}
+  pPrint = PP.int . fromEnum
+  {-# INLINE pPrint #-}
 
 {-----------------------------------------------------------------------
 --  IP addr
@@ -451,16 +450,16 @@ instance Serialize IPv6 where
     get = fromHostAddress6 <$> get
 
 instance Pretty IPv4 where
-  pretty = PP.text . show
-  {-# INLINE pretty #-}
+  pPrint = PP.text . show
+  {-# INLINE pPrint #-}
 
 instance Pretty IPv6 where
-  pretty = PP.text . show
-  {-# INLINE pretty #-}
+  pPrint = PP.text . show
+  {-# INLINE pPrint #-}
 
 instance Pretty IP where
-  pretty = PP.text . show
-  {-# INLINE pretty #-}
+  pPrint = PP.text . show
+  {-# INLINE pPrint #-}
 
 instance Hashable IPv4 where
   hashWithSalt = hashUsing toHostAddress
@@ -569,11 +568,11 @@ instance IsString (PeerAddr IP) where
 -- | fingerprint + "at" + dotted.host.inet.addr:port
 -- TODO: instances for IPv6, HostName
 instance Pretty a => Pretty (PeerAddr a) where
-  pretty PeerAddr {..}
-    | Just pid <- peerId = pretty (fingerprint pid) <+> "at" <+> paddr
+  pPrint PeerAddr {..}
+    | Just pid <- peerId = pPrint (fingerprint pid) <+> "at" <+> paddr
     |     otherwise      = paddr
     where
-      paddr = pretty peerHost <> ":" <> text (show peerPort)
+      paddr = pPrint peerHost <> ":" <> PP.text (show peerPort)
 
 instance Hashable a => Hashable (PeerAddr a) where
   hashWithSalt s PeerAddr {..} =
@@ -649,7 +648,7 @@ instance IsString NodeId where
 
 -- | base16 encoded.
 instance Pretty NodeId where
-  pretty (NodeId nid) = PP.text $ BC.unpack $ Base16.encode nid
+  pPrint (NodeId nid) = PP.text $ BC.unpack $ Base16.encode nid
 
 -- | Test if the nth bit is set.
 testIdBit :: NodeId -> Word -> Bool
@@ -675,10 +674,10 @@ newtype NodeDistance = NodeDistance BS.ByteString
   deriving (Eq, Ord)
 
 instance Pretty NodeDistance where
-  pretty (NodeDistance bs) = foldMap bitseq $ BS.unpack bs
+  pPrint (NodeDistance bs) = foldMap bitseq $ BS.unpack bs
     where
-      listBits w = L.map (testBit w) (L.reverse [0..bitSize w - 1])
-      bitseq = foldMap (int . fromEnum) . listBits
+      listBits w = L.map (testBit w) (L.reverse [0..finiteBitSize w - 1])
+      bitseq = foldMap (PP.int . fromEnum) . listBits
 
 -- | distance(A,B) = |A xor B| Smaller values are closer.
 distance :: NodeId -> NodeId -> NodeDistance
@@ -721,7 +720,7 @@ instance Hashable a => Hashable (NodeAddr a) where
   {-# INLINE hashWithSalt #-}
 
 instance Pretty ip => Pretty (NodeAddr ip) where
-  pretty NodeAddr {..} = pretty nodeHost <> ":" <> pretty nodePort
+  pPrint NodeAddr {..} = pPrint nodeHost <> ":" <> pPrint nodePort
 
 -- | Example:
 --
@@ -755,17 +754,17 @@ instance Serialize a => Serialize (NodeInfo a) where
   put NodeInfo {..} = put nodeId >> put nodeAddr
 
 instance Pretty ip => Pretty (NodeInfo ip) where
-  pretty NodeInfo {..} = pretty nodeId <> "@(" <> pretty nodeAddr <> ")"
+  pPrint NodeInfo {..} = pPrint nodeId <> "@(" <> pPrint nodeAddr <> ")"
 
-instance Pretty ip => Pretty [NodeInfo ip] where
-  pretty = PP.vcat . PP.punctuate "," . L.map pretty
+instance {-# OVERLAPPING #-} Pretty ip => Pretty [NodeInfo ip] where
+  pPrint = PP.vcat . PP.punctuate "," . L.map pPrint
 
 -- | Order by closeness: nearest nodes first.
 rank :: Eq ip => NodeId -> [NodeInfo ip] -> [NodeInfo ip]
 rank nid = L.sortBy (comparing (distance nid . nodeId))
 
 {-----------------------------------------------------------------------
--- Fingerprint
+ -- Fingerprint
 -----------------------------------------------------------------------}
 -- $fingerprint
 --
@@ -787,7 +786,7 @@ rank nid = L.sortBy (comparing (distance nid . nodeId))
 
 -- TODO FIXME
 version :: Version
-version = Version [0, 0, 0, 3] []
+version = Version [0, 0, 0, 4] []
 
 -- | List of registered client versions + 'IlibHSbittorrent' (this
 -- package) + 'IUnknown' (for not recognized software). All names are
@@ -952,9 +951,9 @@ instance IsString Software where
       alist = L.map mk [minBound..maxBound]
       mk  x = (L.tail $ show x, x)
 
--- | Example: @pretty 'IBitLet' == \"IBitLet\"@
+-- | Example: @pPrint 'IBitLet' == \"IBitLet\"@
 instance Pretty Software where
-  pretty = text . L.tail . show
+  pPrint = PP.text . L.tail . show
 
 -- | Just the '0' version.
 instance Default Version where
@@ -972,7 +971,7 @@ instance IsString Version where
       chunkNums = sequence . L.map readMaybe . L.linesBy ('.' ==)
 
 instance Pretty Version where
-  pretty = text . showVersion
+  pPrint = PP.text . showVersion
 
 -- | The all sensible infomation that can be obtained from a peer
 -- identifier or torrent /createdBy/ field.
@@ -993,7 +992,7 @@ instance IsString Fingerprint where
       (impl, _ver) = L.span ((/=) '-') str
 
 instance Pretty Fingerprint where
-  pretty (Fingerprint s v) = pretty s <+> "version" <+> pretty v
+  pPrint (Fingerprint s v) = pPrint s <+> "version" <+> pPrint v
 
 -- | Fingerprint of this (the bittorrent library) package. Normally,
 -- applications should introduce its own fingerprints, otherwise they
@@ -1005,7 +1004,7 @@ libFingerprint =  Fingerprint IlibHSbittorrent version
 -- | HTTP user agent of this (the bittorrent library) package. Can be
 -- used in HTTP tracker requests.
 libUserAgent :: String
-libUserAgent = render (pretty IlibHSbittorrent <> "/" <> pretty version)
+libUserAgent = PP.render (pPrint IlibHSbittorrent <> "/" <> pPrint version)
 
 {-----------------------------------------------------------------------
 --  For torrent file

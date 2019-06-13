@@ -41,7 +41,7 @@ import Data.Typeable hiding (Proxy)
 import Network.URI
 import           Network.HTTP.Conduit hiding
                  (Manager, newManager, closeManager, withManager)
-import           Network.HTTP.Client (defaultManagerSettings)
+import           Network.HTTP.Client (defaultManagerSettings, defaultRequest)
 import           Network.HTTP.Client.Internal (setUri)
 import qualified Network.HTTP.Conduit as HTTP
 import           Network.HTTP.Types.Header (hUserAgent)
@@ -129,7 +129,7 @@ fillRequest Options {..} q r = r
 
 httpTracker :: BEncode a => Manager -> URI -> SimpleQuery -> IO a
 httpTracker Manager {..} uri q = packHttpException $ do
-  request  <- fillRequest options q <$> setUri def uri
+  request  <- fillRequest options q <$> setUri defaultRequest uri
   response <- runResourceT $ httpLbs request httpMgr
   case BE.decode $ BL.toStrict $ responseBody response of
     Left  msg  -> throwIO (ParserFailure msg)

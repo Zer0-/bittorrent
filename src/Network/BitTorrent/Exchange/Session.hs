@@ -35,15 +35,15 @@ import Control.Monad.Logger
 import Control.Monad.Reader
 import Data.ByteString as BS
 import Data.ByteString.Lazy as BL
-import Data.Conduit as C
+import Data.Conduit as C hiding (connect)
 import Data.Conduit.List as C
 import Data.Map as M
 import Data.Monoid
 import Data.Set  as S
 import Data.Text as T
 import Data.Typeable
-import Text.PrettyPrint hiding ((<>))
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass (pPrint)
+import qualified Text.PrettyPrint.HughesPJ as PP
 import System.Log.FastLogger (LogStr, ToLogStr (..))
 
 import Data.BEncode as BE
@@ -222,11 +222,11 @@ instance MonadLogger (Connected Session) where
     conn <- ask
     ses  <- asks connSession
     addr <- asks connRemoteAddr
-    let addrSrc = src <> " @ " <> T.pack (render (pretty addr))
+    let addrSrc = src <> " @ " <> T.pack (PP.render (pPrint addr))
     liftIO $ sessionLogger ses loc addrSrc lvl (toLogStr msg)
 
 logMessage :: MonadLogger m => Message -> m ()
-logMessage msg = logDebugN $ T.pack (render (pretty msg))
+logMessage msg = logDebugN $ T.pack (PP.render (pPrint msg))
 
 logEvent   :: MonadLogger m => Text    -> m ()
 logEvent       = logInfoN

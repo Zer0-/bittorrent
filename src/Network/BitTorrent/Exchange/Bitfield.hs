@@ -121,10 +121,12 @@ data Bitfield = Bitfield {
 
 -- Invariants: all elements of bfSet lie in [0..bfSize - 1];
 
+instance Semigroup Bitfield where
+    (<>) = union
+
 instance Monoid Bitfield where
   {-# SPECIALIZE instance Monoid Bitfield #-}
   mempty  = haveNone 0
-  mappend = union
   mconcat = unions
 
 {-----------------------------------------------------------------------

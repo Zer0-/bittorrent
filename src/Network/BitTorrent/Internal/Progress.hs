@@ -44,8 +44,9 @@ import Data.Serialize as S
 import Data.Ratio
 import Data.Word
 import Network.HTTP.Types.QueryLike
-import Text.PrettyPrint as PP
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass (Pretty(..), (<+>))
+import Text.PrettyPrint.HughesPJ (($$))
+import qualified Text.PrettyPrint.HughesPJ as PP
 
 
 -- | Progress data is considered as dynamic within one client
@@ -77,17 +78,19 @@ instance Default Progress where
   def = Progress 0 0 0
   {-# INLINE def #-}
 
+instance Semigroup Progress where
+    (Progress da la ua) <> (Progress db lb ub) = Progress
+        { _downloaded = da + db
+        , _left       = la + lb
+        , _uploaded   = ua + ub
+        }
+    {-# INLINE (<>) #-}
+
+
 -- | Can be used to aggregate total progress.
 instance Monoid Progress where
   mempty  = def
   {-# INLINE mempty #-}
-
-  mappend (Progress da la ua) (Progress db lb ub) = Progress
-    { _downloaded = da + db
-    , _left       = la + lb
-    , _uploaded   = ua + ub
-    }
-  {-# INLINE mappend #-}
 
 instance QueryValueLike Builder where
   toQueryValue = toQueryValue . BS.toLazyByteString
@@ -104,7 +107,7 @@ instance QueryLike Progress where
     ]
 
 instance Pretty Progress where
-  pretty Progress {..} =
+  pPrint Progress {..} =
     "/\\"  <+> PP.text (show _uploaded)   $$
     "\\/"  <+> PP.text (show _downloaded) $$
     "left" <+> PP.text (show _left)
