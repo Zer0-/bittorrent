@@ -47,7 +47,6 @@ module Network.BitTorrent.Client
        , stop
        ) where
 
-import Control.Applicative
 import Control.Exception
 import Control.Concurrent
 import Control.Concurrent.Chan.Split as CS
@@ -58,13 +57,12 @@ import Control.Monad.Trans.Resource
 import Data.Default
 import Data.HashMap.Strict as HM
 import Data.Text
-import Network
+import Network.Socket
 
 import           Data.Torrent
 import           Network.BitTorrent.Address
 import           Network.BitTorrent.Client.Types
 import           Network.BitTorrent.Client.Handle
-import           Network.BitTorrent.DHT      as DHT      hiding (Options)
 import           Network.BitTorrent.Tracker  as Tracker  hiding (Options)
 import           Network.BitTorrent.Exchange as Exchange hiding (Options)
 import qualified Network.BitTorrent.Exchange as Exchange (Options(..))
@@ -114,9 +112,6 @@ initClient opts @ Options {..} logFun = do
   let mkEx = Exchange.newManager (exchangeOptions pid opts) (connHandler tmap)
   (_, emgr) <- allocate mkEx Exchange.closeManager
 
-  let mkNode = DHT.newNode defaultHandlers def optNodeAddr logFun
-  (_, node) <- allocate mkNode DHT.closeNode
-
   resourceMap <- getInternalState
   eventStream <- liftIO newSendPort
 
@@ -127,7 +122,6 @@ initClient opts @ Options {..} logFun = do
     , clientResources    = resourceMap
     , trackerManager     = tmgr
     , exchangeManager    = emgr
-    , clientNode         = node
     , clientTorrents     = tmap
     , clientLogger       = logFun
     , clientEvents       = eventStream

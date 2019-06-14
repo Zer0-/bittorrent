@@ -27,7 +27,6 @@ import Data.HashMap.Strict as HM
 
 import Data.Torrent
 import Network.BitTorrent.Client.Types as Types
-import Network.BitTorrent.DHT      as DHT
 import Network.BitTorrent.Exchange as Exchange
 import Network.BitTorrent.Tracker  as Tracker
 
@@ -149,8 +148,6 @@ start h @ Handle {..} = do
       Types.Stopped -> do
         Client {..} <- getClient
         liftIO $ Tracker.notify trackerManager handleTrackers Tracker.Started
-        unless handlePrivate $ do
-          liftDHT $ DHT.insert handleTopic (error "start")
         liftIO $ do
           peers <- askPeers trackerManager handleTrackers
           print $ "got: " ++ show (L.length peers) ++ " peers"
@@ -169,8 +166,6 @@ stop h @ Handle {..} = do
       Types.Stopped -> return ()
       Types.Running -> do
         Client {..} <- getClient
-        unless handlePrivate $ do
-          liftDHT $ DHT.delete handleTopic (error "stop")
         liftIO  $ Tracker.notify trackerManager handleTrackers Tracker.Stopped
 
 {-----------------------------------------------------------------------

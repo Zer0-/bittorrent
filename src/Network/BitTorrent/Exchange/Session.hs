@@ -575,5 +575,5 @@ mainWire = do
   Session {..} <- asks connSession
 --  lift $ resizeBitfield (totalPieces storage)
   logEvent "Connection established"
-  iterM logMessage =$= exchange =$= iterM logMessage
+  iterM logMessage .| exchange .| iterM logMessage
   lift finishedConnection

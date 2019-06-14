@@ -47,7 +47,7 @@ listenIncoming Options {..} handler = do
     bind sock (toSockAddr optPeerAddr)
     listen sock optBacklog
     forever $ do
-      (conn, sockAddr) <- accept sock
+      (_, sockAddr) <- accept sock
       case fromSockAddr sockAddr of
         Nothing   -> return ()
         Just addr -> void $ forkIO $ handleNewConn sock addr handler

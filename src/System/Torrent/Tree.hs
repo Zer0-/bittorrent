@@ -26,7 +26,6 @@ module System.Torrent.Tree
 
 import Data.ByteString as BS
 import Data.ByteString.Char8 as BC
-import Data.Foldable
 import Data.List as L
 import Data.Map  as M
 import Data.Monoid

@@ -660,6 +660,7 @@ instance NFData PieceInfo
 instance Default PieceInfo where
   def = PieceInfo 1 def
 
+{-
 class Lint a where
    lint :: a -> Either String a
 
@@ -668,6 +669,7 @@ instance Lint PieceInfo where
     | BS.length (unHashList piPieceHashes) `rem` hashsize == 0
     , piPieceLength >= 0 = return pinfo
     |       otherwise    = Left undefined
+-}
 
 
 putPieceInfo :: Data.Torrent.Put PieceInfo

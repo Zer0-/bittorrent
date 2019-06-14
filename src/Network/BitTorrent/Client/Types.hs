@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Network.BitTorrent.Client.Types
        ( -- * Core types
          HandleStatus (..)
@@ -18,9 +19,9 @@ module Network.BitTorrent.Client.Types
 
          -- * Events
        , Types.Event (..)
+       , LogFun
        ) where
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Chan.Split as CS
 import Control.Monad.Base
@@ -31,8 +32,7 @@ import Control.Monad.Trans.Resource
 import Data.Function
 import Data.HashMap.Strict as HM
 import Data.Ord
-import Network
-import System.Log.FastLogger
+import Network.Socket
 
 import Data.Torrent
 import Network.BitTorrent.Address
@@ -108,12 +108,13 @@ class MonadBitTorrent m where
   liftBT :: BitTorrent a -> m a
 
 instance MonadBaseControl IO BitTorrent where
-  newtype StM BitTorrent a = StM { unSt :: StM (ReaderT Client IO) a }
+  --newtype StM BitTorrent a = StM { unSt :: StM (ReaderT Client IO) a }
+  type StM BitTorrent a = StM (ReaderT Client IO) a
   liftBaseWith cc = BitTorrent $ liftBaseWith $ \ cc' ->
-      cc $ \ (BitTorrent m) -> StM <$> cc' m
+      cc $ \ (BitTorrent m) -> cc' m
   {-# INLINE liftBaseWith #-}
 
-  restoreM = BitTorrent . restoreM . unSt
+  restoreM = BitTorrent . restoreM
   {-# INLINE restoreM #-}
 
 -- | NOP.
