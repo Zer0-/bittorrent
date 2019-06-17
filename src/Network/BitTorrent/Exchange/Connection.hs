@@ -263,6 +263,7 @@ peerPenalty  DisconnectPeer   = 0
 peerPenalty  PeerDisconnected = 0
 peerPenalty (DecodingError _) = 1
 peerPenalty (ProtocolError e) = errorPenalty e
+peerPenalty (ConnectionRefused _) = 1
 peerPenalty (FloodDetected _) = 1
 
 -- | Do nothing with exception, used with 'handle' or 'try'.
@@ -863,9 +864,6 @@ instance Default ConnectionPrefs where
     , prefExtCaps  = def
     }
 
-normalize :: ConnectionPrefs -> ConnectionPrefs
-normalize = error "normalize"
-
 -- | Bridge between 'Connection' and 'Network.BitTorrent.Exchange.Session'.
 data SessionLink s = SessionLink
   { linkTopic        :: !(InfoHash)
@@ -948,7 +946,7 @@ closePending PendingConnection {..} = do
 
 chanToSock :: Int -> Chan Message -> Socket -> IO ()
 chanToSock ka chan sock =
-  sourceChan ka chan $= conduitPut S.put C.$$ sinkSocket sock
+  sourceChan ka chan .| conduitPut S.put C.$$ sinkSocket sock
 
 afterHandshaking :: ChannelSide -> PeerAddr IP -> Socket -> HandshakePair
                  -> ConnectionConfig s -> IO ()

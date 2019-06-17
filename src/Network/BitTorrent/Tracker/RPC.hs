@@ -32,9 +32,8 @@ module Network.BitTorrent.Tracker.RPC
 import Control.Exception
 import Data.Default
 import Data.Typeable
-import Network
+import Network.Socket
 import Network.URI
-import Network.Socket (HostAddress)
 
 import           Data.Torrent
 import           Network.BitTorrent.Address

@@ -45,7 +45,6 @@ module System.Torrent.Storage
        , sinkStorage
        ) where
 
-import Control.Applicative
 import Control.Exception
 import Control.Monad as M
 import Control.Monad.Trans
@@ -173,7 +172,7 @@ unsafeReadPiece pix s @ Storage {..}
     sz     = fromIntegral pieceLen
 
 -- | Stream storage pieces from first to the last.
-sourceStorage :: Storage -> Source IO (Piece BL.ByteString)
+sourceStorage :: Storage -> ConduitT () (Piece BL.ByteString) IO ()
 sourceStorage s = go 0
   where
     go pix
@@ -185,7 +184,7 @@ sourceStorage s = go 0
         |       otherwise     = return ()
 
 -- | Write stream of pieces to the storage. Fail if storage is 'ReadOnly'.
-sinkStorage :: Storage -> Sink (Piece BL.ByteString) IO ()
+sinkStorage :: Storage -> ConduitT (Piece BL.ByteString) Void IO ()
 sinkStorage s = do
   awaitForever $ \ piece ->
     liftIO $ writePiece piece s
@@ -194,7 +193,7 @@ sinkStorage s = do
 -- opened files.
 genPieceInfo :: Storage -> IO PieceInfo
 genPieceInfo s = do
-  hashes <- sourceStorage s $= C.map hashPiece $$ C.sinkLbs
+  hashes <- sourceStorage s .| C.map hashPiece $$ C.sinkLbs
   return $ PieceInfo (pieceLen s) (HashList (BL.toStrict hashes))
 
 -- | Verify specific piece using infodict hash list.

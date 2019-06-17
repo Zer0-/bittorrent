@@ -101,7 +101,6 @@ import           Data.IntervalSet (IntSet)
 import qualified Data.IntervalSet as S
 import qualified Data.IntervalSet.ByteString as S
 import           Data.List (foldl')
-import           Data.Monoid
 import           Data.Ratio
 
 import Data.Torrent

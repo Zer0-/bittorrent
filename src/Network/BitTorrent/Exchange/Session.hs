@@ -24,12 +24,11 @@ module Network.BitTorrent.Exchange.Session
        , takeMetadata
        ) where
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Chan.Split as CS
 import Control.Concurrent.STM
 import Control.Exception hiding (Handler)
-import Control.Lens
+import Control.Lens hiding (ix)
 import Control.Monad as M
 import Control.Monad.Logger
 import Control.Monad.Reader
@@ -38,7 +37,6 @@ import Data.ByteString.Lazy as BL
 import Data.Conduit as C hiding (connect)
 import Data.Conduit.List as C
 import Data.Map as M
-import Data.Monoid
 import Data.Set  as S
 import Data.Text as T
 import Data.Typeable
@@ -53,7 +51,7 @@ import Network.BitTorrent.Address
 import Network.BitTorrent.Exchange.Bitfield as BF
 import Network.BitTorrent.Exchange.Block   as Block
 import Network.BitTorrent.Exchange.Connection
-import Network.BitTorrent.Exchange.Download as D
+import qualified Network.BitTorrent.Exchange.Download as D
 import Network.BitTorrent.Exchange.Message as Message
 import System.Torrent.Storage
 
@@ -91,18 +89,18 @@ type LogFun = Loc -> LogSource -> LogLevel -> LogStr -> IO ()
 
 data SessionState
   = WaitingMetadata
-    { metadataDownload  :: MVar MetadataDownload
+    { metadataDownload  :: MVar D.MetadataDownload
     , metadataCompleted :: MVar InfoDict -- ^ used to unblock waiters
     , contentRootPath   :: FilePath
     }
   | HavingMetadata
     { metadataCache     :: Cached InfoDict
-    , contentDownload   :: MVar ContentDownload
+    , contentDownload   :: MVar D.ContentDownload
     , contentStorage    :: Storage
     }
 
 newSessionState :: FilePath -> Either InfoHash InfoDict -> IO SessionState
-newSessionState rootPath (Left  ih  ) = do
+newSessionState rootPath (Left  _) = do
   WaitingMetadata <$> newMVar def <*> newEmptyMVar <*> pure rootPath
 newSessionState rootPath (Right dict) = do
   storage     <- openInfoDict ReadWriteEx rootPath dict
@@ -219,7 +217,7 @@ withSession = error "withSession"
 
 instance MonadLogger (Connected Session) where
   monadLoggerLog loc src lvl msg = do
-    conn <- ask
+    _ <- ask
     ses  <- asks connSession
     addr <- asks connRemoteAddr
     let addrSrc = src <> " @ " <> T.pack (PP.render (pPrint addr))
@@ -336,30 +334,19 @@ establish conn = runConnection (acceptWire conn) (closePending conn)
                  (pendingPeer conn)
 
 -- | Conduit version of 'connect'.
-connectSink :: MonadIO m => Session -> Sink [PeerAddr IPv4] m ()
+connectSink :: MonadIO m => Session -> ConduitT [PeerAddr IPv4] Void m ()
 connectSink s = C.mapM_ (liftIO . connectBatch)
   where
     connectBatch = M.mapM_ (\ addr -> connect (IPv4 <$> addr) s)
-
--- | Why do we need this message?
-type BroadcastMessage = ExtendedCaps -> Message
-
-broadcast :: BroadcastMessage -> Session -> IO ()
-broadcast = error "broadcast"
 
 {-----------------------------------------------------------------------
 --  Helpers
 -----------------------------------------------------------------------}
 
+{-
 waitMVar :: MVar a -> IO ()
 waitMVar m = withMVar m (const (return ()))
-
--- This function appear in new GHC "out of box". (moreover it is atomic)
-tryReadMVar :: MVar a -> IO (Maybe a)
-tryReadMVar m = do
-  ma <- tryTakeMVar m
-  maybe (return ()) (putMVar m) ma
-  return ma
+-}
 
 readBlock :: BlockIx -> Storage -> IO (Block BL.ByteString)
 readBlock bix @ BlockIx {..} s = do
@@ -373,7 +360,7 @@ readBlock bix @ BlockIx {..} s = do
 -- |
 tryReadMetadataBlock :: PieceIx
    -> Connected Session (Maybe (Torrent.Piece BS.ByteString, Int))
-tryReadMetadataBlock pix = do
+tryReadMetadataBlock _ = do
   Session {..} <- asks connSession
   s            <- liftIO (readMVar sessionState)
   case s of
@@ -381,7 +368,7 @@ tryReadMetadataBlock pix = do
     HavingMetadata  {..} -> error "tryReadMetadataBlock"
 
 sendBroadcast :: PeerMessage msg => msg -> Wire Session ()
-sendBroadcast msg = do
+sendBroadcast _ = do
   Session {..} <- asks connSession
   error "sendBroadcast"
 --  liftIO $ msg `broadcast` sessionConnections
@@ -409,16 +396,16 @@ type Trigger = Wire Session ()
 
 interesting :: Trigger
 interesting = do
-  addr <- asks connRemoteAddr
+  _ <- asks connRemoteAddr
   sendMessage (Interested True)
   sendMessage (Choking    False)
   tryFillRequestQueue
 
 fillRequestQueue :: Trigger
 fillRequestQueue = do
-  maxN <- lift getMaxQueueLength
-  rbf  <- use  connBitfield
-  addr <- asks connRemoteAddr
+  _ <- lift getMaxQueueLength
+  _  <- use  connBitfield
+  _ <- asks connRemoteAddr
 --  blks <- withStatusUpdates $ do
 --    n <- getRequestQueueLength addr
 --    scheduleBlocks addr rbf (maxN - n)
@@ -427,8 +414,8 @@ fillRequestQueue = do
 
 tryFillRequestQueue :: Trigger
 tryFillRequestQueue = do
-  allowed <- canDownload <$> use connStatus
-  when allowed $ do
+  a <- canDownload <$> use connStatus
+  when a $ do
     fillRequestQueue
 
 {-----------------------------------------------------------------------
@@ -443,7 +430,7 @@ handleStatus s = do
   case s of
     Interested _     -> return ()
     Choking    True  -> do
-      addr <- asks connRemoteAddr
+      _ <- asks connRemoteAddr
 --      withStatusUpdates (SS.resetPending addr)
       return ()
     Choking    False -> tryFillRequestQueue
@@ -494,7 +481,7 @@ handleTransfer (Message.Piece   blk) = do
 
 handleTransfer (Cancel  bix) = filterQueue (not . (transferResponse bix))
   where
-    transferResponse bix (Transfer (Message.Piece blk)) = blockIx blk == bix
+    transferResponse bix2 (Transfer (Message.Piece blk)) = blockIx blk == bix2
     transferResponse _    _                             = False
 
 {-----------------------------------------------------------------------
@@ -527,7 +514,7 @@ handleMetadata (MetadataRequest pix) =
     mkResponse (Just (piece, total)) = MetadataData   piece total
 
 handleMetadata (MetadataData   {..}) = do
-  ih    <- asks connTopic
+  _    <- asks connTopic
   mdict <- lift $ undefined --withMetadataUpdates (Metadata.pushBlock piece ih)
   case mdict of
     Nothing   -> tryRequestMetadataBlock -- not completed, need all blocks
@@ -535,7 +522,7 @@ handleMetadata (MetadataData   {..}) = do
       Session {..} <- asks connSession
       liftIO $ modifyMVar_ sessionState (haveMetadata dict)
 
-handleMetadata (MetadataReject  pix) = do
+handleMetadata (MetadataReject  _) = do
   lift $ undefined -- withMetadataUpdates (Metadata.cancelPending pix)
 
 handleMetadata (MetadataUnknown _  ) = do
@@ -546,7 +533,7 @@ handleMetadata (MetadataUnknown _  ) = do
 -----------------------------------------------------------------------}
 
 acceptRehandshake :: ExtendedHandshake -> Trigger
-acceptRehandshake ehs = error "acceptRehandshake"
+acceptRehandshake _ = error "acceptRehandshake"
 
 handleExtended :: Handler ExtendedMessage
 handleExtended (EHandshake     ehs) = acceptRehandshake ehs
@@ -558,7 +545,7 @@ handleMessage KeepAlive       = return ()
 handleMessage (Status s)      = handleStatus s
 handleMessage (Available msg) = handleAvailable msg
 handleMessage (Transfer  msg) = handleTransfer msg
-handleMessage (Port      n)   = error "handleMessage"
+handleMessage (Port      _)   = error "handleMessage"
 handleMessage (Fast      _)   = error "handleMessage"
 handleMessage (Extended  msg) = handleExtended msg
 

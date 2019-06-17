@@ -34,12 +34,9 @@ module Network.BitTorrent.Internal.Progress
        , canUpload
        ) where
 
-import Control.Applicative
 import Control.Lens hiding ((%=))
 import Data.ByteString.Lazy.Builder  as BS
-import Data.ByteString.Lazy.Builder.ASCII as BS
 import Data.Default
-import Data.Monoid
 import Data.Serialize as S
 import Data.Ratio
 import Data.Word

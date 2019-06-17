@@ -29,7 +29,6 @@ module Network.BitTorrent.Exchange.Download
        , contentDownload
        ) where
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Lens
 import Control.Monad.State
@@ -42,7 +41,7 @@ import Data.Maybe
 import Data.Map as M
 import Data.Tuple
 
-import Data.Torrent as Torrent
+import Data.Torrent as Torrent hiding (pieceSize)
 import Network.BitTorrent.Address
 import Network.BitTorrent.Exchange.Bitfield as BF
 import Network.BitTorrent.Exchange.Block    as Block
@@ -112,7 +111,7 @@ instance Default MetadataDownload where
 cancelPending pix = pendingPieces %= L.filter ((pix ==) . snd)
 
 instance Download MetadataDownload (Piece BS.ByteString) where
-  scheduleBlock addr bf = do
+  scheduleBlock addr _ = do
     bkt  <- use bucket
     case spans metadataPieceSize bkt of
       []              -> return Nothing
@@ -136,20 +135,20 @@ instance Download MetadataDownload (Piece BS.ByteString) where
       Just chunks -> do
           t <- use topic
           case parseInfoDict (BL.toStrict chunks) t of
-            Right x -> do
+            Right _ -> do
                 pendingPieces .= []
                 return undefined -- (Just x)
-            Left  e -> do
+            Left  _ -> do
                 pendingPieces .= []
                 bucket .= Block.empty (Block.size b)
                 return undefined -- Nothing
    where
       -- todo use incremental parsing to avoid BS.concat call
       parseInfoDict :: BS.ByteString -> InfoHash -> Result InfoDict
-      parseInfoDict chunk topic =
+      parseInfoDict chunk info =
         case BE.decode chunk of
           Right (infodict @ InfoDict {..})
-            | topic == idInfoHash -> return infodict
+            | info == idInfoHash -> return infodict
             |      otherwise      -> Left "broken infodict"
           Left err -> Left $ "unable to parse infodict " ++ err
 
@@ -252,7 +251,7 @@ instance Download ContentDownload (Block BL.ByteString) where
       -- TODO choose block nearest to pending or stalled sets to reduce disk
       -- seeks on remote machines
       --chooseBlocks :: [BlockIx] -> Int -> DownloadUpdates [BlockIx]
-      chooseBlocks xs n = return (L.take n xs)
+      chooseBlocks xs j = return (L.take j xs)
 
       -- TODO use selection strategies from Exchange.Selector
       --choosePiece :: Bitfield -> DownloadUpdates (Maybe PieceIx)
@@ -269,7 +268,7 @@ instance Download ContentDownload (Block BL.ByteString) where
       reset = fmap $ \ e -> e
             { pending = L.filter (not . (==) addr . fst) (pending e) }
 
-  pushBlock addr blk @ Block {..} = do
+  pushBlock _ blk @ Block {..} = do
     mpe <- gets (M.lookup blkPiece . inprogress)
     case mpe of
       Nothing -> return Nothing

@@ -42,7 +42,6 @@ import Data.Serialize
 import Data.Text as T
 import Data.Time
 import Data.Time.Clock.POSIX
-import Data.Traversable
 import Data.Typeable
 import Text.Read (readMaybe)
 import Network.Socket hiding (Connected, connect, listen)

@@ -81,7 +81,7 @@ traverseWithURI f (Announce (uri, a)) = (Announce . (,) uri) <$> f (uri, a)
 traverseWithURI f (TierList  xxs    ) =
     TierList <$> traverse (traverse (traverseEntry f)) xxs
   where
-    traverseEntry f (uri, a) = (,) uri <$> f (uri, a)
+    traverseEntry g (uri, a) = (,) uri <$> g (uri, a)
 
 {-----------------------------------------------------------------------
 --  List extraction

@@ -54,7 +54,6 @@ import Data.IORef
 import Data.List as L
 import Data.Maybe
 import Data.Time
-import Data.Traversable
 import Network.URI
 
 import Data.Torrent
@@ -135,6 +134,8 @@ cachePeers AnnounceInfo {..} =
             (seconds (fromMaybe respInterval respMinInterval))
             (getPeerList respPeers)
 
+cachePeers _ = undefined
+
 cacheScrape :: AnnounceInfo -> IO (Cached LastScrape)
 cacheScrape AnnounceInfo {..} =
   newCached (seconds respInterval)
@@ -143,6 +144,8 @@ cacheScrape AnnounceInfo {..} =
       { scrapeSeeders  = respComplete
       , scrapeLeechers = respIncomplete
       }
+
+cacheScrape _ = undefined
 
 -- | Make announce request to specific tracker returning new state.
 notifyTo :: Manager -> Session -> AnnounceEvent
@@ -286,20 +289,16 @@ collect f lst = (catMaybes . F.toList) <$> traverse f lst
 
 addTracker :: Session -> URI -> IO ()
 addTracker Session {..} uri = do
-  undefined
+  _ <- undefined --wtf
   send sessionEvents (TrackerAdded uri)
 
 removeTracker :: Manager -> Session -> URI -> IO ()
-removeTracker m Session {..} uri = do
+removeTracker _ Session {..} uri = do
   send sessionEvents (TrackerRemoved uri)
 
 -- Also, as specified under the definitions section, a tracker that
 -- has not worked should never be propagated to other peers over the
 -- tracker exchange protocol.
-
--- | Return all known trackers.
-getTrackers :: Session -> IO [URI]
-getTrackers = undefined
 
 -- | Return trackers from torrent file and
 getTrustedTrackers :: Session -> IO [URI]

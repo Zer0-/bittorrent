@@ -26,7 +26,6 @@ module Network.BitTorrent.Tracker.RPC.HTTP
        , scrapeOne
        ) where
 
-import Control.Applicative
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Resource
@@ -36,11 +35,10 @@ import Data.ByteString.Char8 as BC
 import Data.ByteString.Lazy  as BL
 import Data.Default
 import Data.List as L
-import Data.Monoid
 import Data.Typeable hiding (Proxy)
 import Network.URI
 import           Network.HTTP.Conduit hiding
-                 (Manager, newManager, closeManager, withManager)
+                 (Manager, newManager, closeManager)
 import           Network.HTTP.Client (defaultManagerSettings, defaultRequest)
 import           Network.HTTP.Client.Internal (setUri)
 import qualified Network.HTTP.Conduit as HTTP

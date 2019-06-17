@@ -23,7 +23,6 @@ module System.Torrent.FileMap
        , toLazyByteString
        ) where
 
-import Control.Applicative
 import Control.Monad as L
 import Data.ByteString as BS
 import Data.ByteString.Internal as BS
