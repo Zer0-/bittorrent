@@ -3,6 +3,7 @@ module Network.BitTorrent.Exchange.BitfieldSpec (spec) where
 import Control.Applicative
 import Test.Hspec
 import Test.QuickCheck
+import Test.QuickCheck.Instances.ByteString
 
 import Network.BitTorrent.Exchange.Bitfield
 

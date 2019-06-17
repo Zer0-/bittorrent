@@ -39,8 +39,10 @@ import Network.BitTorrent.Address (IP, PeerAddr (PeerAddr), genPeerId)
 type ClientName = String
 
 
+{-
 instance Read PortNumber where
   readsPrec = error "readsPrec"
+-}
 
 data ClientOpts = ClientOpts
   { peerPort   :: PortNumber  -- tcp port
@@ -61,21 +63,6 @@ defThisOpts = def
   { peerPort = 6882
   , nodePort = 6882
   }
-
-clientOptsParser :: Parser ClientOpts
-clientOptsParser = ClientOpts
-  <$> option
-    ( long    "peer-port"  <> short 'p'
-   <> value   6881         <> showDefault
-   <> metavar "NUM"
-   <> help    "port to bind the specified bittorrent client"
-    )
-  <*> option
-    ( long    "node-port"  <> short 'n'
-   <> value   6881         <> showDefault
-   <> metavar "NUM"
-   <> help    "port to bind node of the specified client"
-    )
 
 data EnvOpts = EnvOpts
   { testClient   :: Maybe ClientName
@@ -99,24 +86,6 @@ findConflicts EnvOpts {..}
   | nodePort remoteOpts == nodePort thisOpts = ["Node port the same"]
   |         otherwise        = []
 
-
-envOptsParser :: Parser EnvOpts
-envOptsParser = EnvOpts
-  <$> optional (strOption
-    ( long    "bittorrent-client"
-   <> metavar "CLIENT"
-   <> help    "torrent client to run"
-    ))
-  <*> pure []
-  <*> clientOptsParser
-  <*> clientOptsParser
-
-envOptsInfo :: ParserInfo EnvOpts
-envOptsInfo = info (helper <*> envOptsParser)
-   ( fullDesc
-  <> progDesc "The bittorrent library testsuite"
-  <> header   ""
-   )
 
 -- do not modify this while test suite is running because spec items
 -- can run in parallel
