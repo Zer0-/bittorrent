@@ -26,7 +26,8 @@ let
       mkDerivation {
         pname = "bittorrent";
         version = "0.0.0.3";
-        sha256 = "155bbqqn33mlavvcm6xfxs4dqij66jfhqxjmrjkyxvzd36yz0ann";
+        #sha256 = "155bbqqn33mlavvcm6xfxs4dqij66jfhqxjmrjkyxvzd36yz0ann";
+        src = ./.;
         isLibrary = true;
         isExecutable = true;
         libraryHaskellDepends = [
@@ -50,6 +51,7 @@ let
         homepage = "https://github.com/cobit/bittorrent";
         description = "BitTorrent protocol implementation";
         license = stdenv.lib.licenses.bsd3;
+        doCheck = false;
       };
 
   haskellPackages = if compiler == "default"
@@ -67,5 +69,6 @@ let
     );
 
 in
+  #drv
 
   if pkgs.lib.inNixShell then drv.env else drv

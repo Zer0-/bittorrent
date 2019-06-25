@@ -49,7 +49,7 @@ if a particular BEP is "todo", "in progress" or "complete":
 [bep5-impl]:  src/Network/BitTorrent/DHT/Protocol.hs
 [bep6-impl]:  src/Network/BitTorrent/Exchange/Message.hs
 [bep7-impl]:  src/Network/BitTorrent/Tracker/Message.hs
-[bep9-impl]:  src/Network/BitTorrent/Exchange/Wire.hs
+[bep9-impl]:  src/Network/BitTorrent/Exchange/Connection.hs
 [bep10-impl]: src/Network/BitTorrent/Exchange/Message.hs
 [bep12-impl]: src/Data/Torrent.hs
 [bep15-impl]: src/Network/BitTorrent/Tracker/RPC/UDP.hs

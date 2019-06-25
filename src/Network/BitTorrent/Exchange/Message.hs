@@ -283,6 +283,7 @@ instance Serialize Handshake where
     put hsReserved
     put hsInfoHash
     put hsPeerId
+
   get = Handshake <$> get <*> get <*> get <*> get
 
 -- | Show handshake protocol string, caps and fingerprint.

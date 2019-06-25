@@ -1,9 +1,0 @@
-[submodule "sub/bencoding"]
-	path = sub/bencoding
-	url = git://github.com/pxqr/bencoding.git
-[submodule "sub/krpc"]
-	path = sub/krpc
-	url = git://github.com/pxqr/krpc.git
-[submodule "sub/optparse-applicative"]
-	path = sub/optparse-applicative
-	url = https://github.com/pcapriotti/optparse-applicative.git

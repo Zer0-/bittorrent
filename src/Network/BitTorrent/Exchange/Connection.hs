@@ -693,7 +693,7 @@ recvHandshake sock = do
 
     body <- BS.recv sock restLen
     let resp = BS.cons protocolLen body
-    either (throwIO . userError) return $ S.decode resp
+    either (throwIO . userError) return (S.decode resp)
 
 -- | Handshaking with a peer specified by the second argument.
 --
