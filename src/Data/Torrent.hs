@@ -33,7 +33,7 @@
 module Data.Torrent
        ( -- * InfoHash
          -- $infohash
-         InfoHash
+         InfoHash(..)
        , textToInfoHash
        , longHex
        , shortHex

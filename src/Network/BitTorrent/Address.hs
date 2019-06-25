@@ -31,7 +31,7 @@ module Network.BitTorrent.Address
 
          -- * PeerId
          -- $peer-id
-       , PeerId
+       , PeerId (..)
 
          -- ** Generation
        , genPeerId
