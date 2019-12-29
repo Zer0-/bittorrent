@@ -948,8 +948,13 @@ chanToSock :: Int -> Chan Message -> Socket -> IO ()
 chanToSock ka chan sock =
   sourceChan ka chan .| conduitPut S.put C.$$ sinkSocket sock
 
-afterHandshaking :: ChannelSide -> PeerAddr IP -> Socket -> HandshakePair
-                 -> ConnectionConfig s -> IO ()
+afterHandshaking
+    :: ChannelSide
+    -> PeerAddr IP
+    -> Socket
+    -> HandshakePair
+    -> ConnectionConfig s
+    -> IO ()
 afterHandshaking initiator addr sock
   hpair @ (HandshakePair hs hs')
           (ConnectionConfig

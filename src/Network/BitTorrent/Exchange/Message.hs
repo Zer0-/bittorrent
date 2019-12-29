@@ -785,7 +785,7 @@ data ExtendedMetadata
     -- is either a 'MetadataReject' or a 'MetadataData' message.
   = MetadataRequest PieceIx
 
-    -- | If sender requested a valid 'PieceIx' and receiver have the
+    -- | If sender requested a valid 'PieceIx' and receiver has the
     -- corresponding piece then receiver should respond with this
     -- message.
   | MetadataData
