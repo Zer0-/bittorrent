@@ -91,7 +91,7 @@ import qualified Data.ByteString.Lazy.Builder as BS
 import Data.Char
 import Data.Convertible
 import Data.Default
-import Data.IP hiding (fromSockAddr)
+import Data.IP hiding (fromSockAddr, toSockAddr)
 import Data.List as L
 import Data.List.Split as L
 import Data.Maybe       (fromMaybe, catMaybes)
